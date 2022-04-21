@@ -1,0 +1,13 @@
+Funkcje do napisania:
+
+- funkcja inicjalizująca deamona
+- funkcja sprawdzająca poprawność wpisanej składni polcenia
+- funkcja zmieniająca zmienne globalne ze względu na podane opcje w poleceniu
+- funkcja odpowiadająca na wysyłane sygnały
+- funkcja porównująca zawartość dwóch katalogów
+    - funkcja zwracająca zawartość katalogu
+    - funkcja sprawdzająca czy dany plik jest zwykłym plikiem czy katalogiem
+    - funkcja
+- funkcja kopiująca plik w zwykły sposób - czytając plik do bufora i go zapisując
+- funkcja kopiująca plik z mapowaniem
+- funkcja usuwająca pliki z katalogu docelowego jeżeli nie istnieją one w katalogu źródłowym
