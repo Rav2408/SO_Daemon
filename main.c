@@ -38,54 +38,54 @@ int fileOrDir(char* path){
     return -1;      //error
 }
 
-int checkParameters(int argc, char* argv[])
-{
-    if (argc < 3 || argc > 8)
-    {
+void signalHandle(int sig){
+	if(sig == SIGALRM) syslog(LOG_INFO, "Demon woken up automatically");
+    else if (sig == SIGUSR1) syslog(LOG_INFO, "Demon woken up by SIGUSR1 signal");
+}
+
+void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){
+	sigemptyset(&newSet);
+	newSignal.sa_handler = &signalHandle;
+	newSignal.sa_flags = 0;
+	newSignal.sa_mask = newSet;
+	sigaction(sig, &newSignal, NULL);
+}
+
+int checkParameters(int argc, char* argv[]){
+    if (argc < 3 || argc > 8){
         syslog(LOG_ERR, "Wrong number of parameters");
         return -1;
     }
-    else if (fileOrDir(argv[1]) != 0)
-    {
+    else if (fileOrDir(argv[1]) != 0){
         syslog(LOG_ERR, "%s is not valid", argv[1]);
         return -1;
     }
-    else if (fileOrDir(argv[2]) != 0)
-    {
+    else if (fileOrDir(argv[2]) != 0){
         syslog(LOG_ERR, "%s is not valid", argv[2]);
         return -1;
     }
-    else
-    {
+    else{
         return 0;
     }
 }
 
-void setParameters(int argc, char* argv[])
-{
-    for (int i = 3; i < argc; i++)
-    {
-        if (argv[i][0] == '-' && argv[i][1] == 't')
-        {
-            if (i+1 < argc && atoi(argv[i+1]) > 0)
-            {
+void setParameters(int argc, char* argv[]){
+    for (int i = 3; i < argc; i++){
+        if (argv[i][0] == '-' && argv[i][1] == 't'){
+            if (i+1 < argc && atoi(argv[i+1]) > 0){
                 sleepTime = atoi(argv[i+1]);
             }
         }
-        if (argv[i][0] == '-' && argv[i][1] == 'R')
-        {
+        if (argv[i][0] == '-' && argv[i][1] == 'R'){
             recursion_option = 1;
         }
-        if (argv[i][0] == '-' && argv[i][1] == 'd')
-        {
-            if (i+1 < argc && atoi(argv[i+1]) > 0)
-            {
+        if (argv[i][0] == '-' && argv[i][1] == 'd'){
+            if (i+1 < argc && atoi(argv[i+1]) > 0){
                 cp_buffer = atoi(argv[i + 1]);
             }
         }
     }
 }
-
 
 char* pathLinking(char* path, char* fName){
     char* fullPath = malloc(MAX_PATH_LENGTH*sizeof(char));
@@ -96,7 +96,6 @@ char* pathLinking(char* path, char* fName){
 }
 
 int readWriteCopy(char* src, char* dst){
-
     FILE* srcFile = fopen(src, "rb");
     FILE* dstFile = fopen(dst, "wb");
 
@@ -168,7 +167,7 @@ int checkAndSync(char* src,char* dst){
         syslog(LOG_ERR, "Error opening source directory: %s", src);
         return 1;
     }
-    if(dstDir==NULL){
+    if(dstDir==NfULL){
         syslog(LOG_ERR, "Error opening destination directory: %s", dst);
         return 1;
     }
@@ -253,6 +252,8 @@ int checkAndDelete(char* src,char* dst) {
 }
 
 int main(int argc, char* argv[]){
+    struct sigaction autoSig, userSig;
+    sigset_t autoSet, userSet;
     // Open a log file
     openlog("SynchronizeDemon", LOG_PID, LOG_LOCAL0);
     if(checkParameters(argc,argv) == -1) exit(-1);
@@ -288,12 +289,13 @@ int main(int argc, char* argv[]){
 
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
-        syslog(LOG_INFO, "SynchronizeDemon woke up");
-        //sprawdzanie sygnałów
+        //syslog(LOG_INFO, "SynchronizeDemon woke up");
+        setSignal(autoSignal, autoSet, SIGALRM);
+		setSignal(userSignal, userSet, SIGUSR1);
         checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
         checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
-        sleep(sleepTime);
+        alarm(sleepTime);
         //spanie
 
     }
