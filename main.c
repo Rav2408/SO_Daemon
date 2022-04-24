@@ -24,7 +24,7 @@ int checkIfPathIsDirectory(char* path)
 {
     struct stat statistics;
 
-    stat(path, statistics);
+    stat(path, &statistics);
     
     if (S_ISDIR(statistics.st_mode) != 0) return 1;
     else return -1;
