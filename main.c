@@ -103,6 +103,7 @@ int checkAndSync(char* src,char* dst){
     char* srcFilePath;
     char* dstFilePath;
 
+    syslog(LOG_INFO, "jestem chceckAndSync: %s  %s", src, dst);
 
     if(srcDir==NULL){
         syslog(LOG_ERR, "Error opening source directory: %s", src);
@@ -133,6 +134,7 @@ int checkAndSync(char* src,char* dst){
             }
         }
     }
+    syslog(LOG_INFO, "zakonczylem chceckAndSync: %s  %s", src, dst);
     free(currentFile);
     closedir(srcDir);
     closedir(dstDir);
@@ -143,6 +145,7 @@ int checkAndDelete(char* src,char* dst) {
     DIR *srcDir = opendir(src);
     DIR *dstDir = opendir(dst);
 
+    syslog(LOG_INFO, "jestem chceckAndDelete: %s  %s", src, dst);
     struct dirent *currentFile;
     struct stat srcFStat, dstFStat;
     int file_exist;
@@ -183,6 +186,7 @@ int checkAndDelete(char* src,char* dst) {
 
         }
     }
+    syslog(LOG_INFO, "zakonczylem chceckAndDelete: %s  %s", src, dst);
     free(currentFile);
     closedir(srcDir);
     closedir(dstDir);
@@ -225,8 +229,8 @@ int main(int argc, char* argv[]){
     while (1){
         syslog(LOG_INFO, "SynchronizeDemon woke up");
         //sprawdzanie sygnałów
-        checkAndSync(argv[2], argv[3]); //sprawdzanie katalogu źródłowego w celu kopiowania
-        checkAndDelete(argv[2], argv[3]); //sprawdzanie katalogu docelowego w celu usuwania
+        checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
+        checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
         sleep(15);
         //spanie
