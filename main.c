@@ -290,8 +290,8 @@ int main(int argc, char* argv[]){
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
         //syslog(LOG_INFO, "SynchronizeDemon woke up");
-        setSignal(autoSignal, autoSet, SIGALRM);
-		setSignal(userSignal, userSet, SIGUSR1);
+        setSignal(autoSig, autoSet, SIGALRM);
+		setSignal(userSig, userSet, SIGUSR1);
         checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
         checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
