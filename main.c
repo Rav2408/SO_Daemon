@@ -14,10 +14,21 @@
 #include <limits.h> 		// limity systemowe (w celu pobrania PATH_MAX, czyli maksymalna dlugosc sciezki w systemie)
 
 #define MAX_PATH_LENGTH 2048
-#define COPY_BUFFER 1024
 
 int cp_buffer = 2048;
 int recursion_option = 0;
+int sleepTime = 15;
+
+//int checkIfPathIsDirectory(char* path)
+//{
+//    struct stat statistics;
+//
+//    stat(path, &statistics);
+//
+//    if (S_ISDIR(statistics.st_mode) != 0) return 1;
+//    else return -1;
+//}
+
 
 int fileOrDir(char* path){
     struct stat fileStatistic;
@@ -27,12 +38,61 @@ int fileOrDir(char* path){
     return -1;      //error
 }
 
+int checkParameters(int argc, char* argv[])
+{
+    if (argc < 3 || argc > 8)
+    {
+        syslog(LOG_ERR, "Wrong number of parameters");
+        return -1;
+    }
+    else if (fileOrDir(argv[1]) != 0)
+    {
+        syslog(LOG_ERR, "%s is not valid", argv[1]);
+        return -1;
+    }
+    else if (fileOrDir(argv[2]) != 0)
+    {
+        syslog(LOG_ERR, "%s is not valid", argv[2]);
+        return -1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+
+void setParameters(int argc, char* argv[])
+{
+    for (int i = 3; i < argc; i++)
+    {
+        if (argv[i][0] == '-' && argv[i][1] == 't')
+        {
+            if (i+1 < argc && atoi(argv[i+1]) > 0)
+            {
+                sleepTime = atoi(argv[i+1]);
+            }
+        }
+        if (argv[i][0] == '-' && argv[i][1] == 'R')
+        {
+            recursion_option = 1;
+        }
+        if (argv[i][0] == '-' && argv[i][1] == 'd')
+        {
+            if (i+1 < argc && atoi(argv[i+1]) > 0)
+            {
+                cp_buffer = atoi(argv[i + 1]);
+            }
+        }
+    }
+}
+
+
 char* pathLinking(char* path, char* fName){
     char* fullPath = malloc(MAX_PATH_LENGTH*sizeof(char));
     strcpy(fullPath,path);
     strcat(fullPath,"/");
     strcat(fullPath,fName);
-    return fullPath;
+    return (char*)fullPath;
 }
 
 int readWriteCopy(char* src, char* dst){
@@ -50,12 +110,12 @@ int readWriteCopy(char* src, char* dst){
         return 1;
     }
 
-    char buffer[COPY_BUFFER];
+    char buffer[cp_buffer];
     size_t in,out;
 
     syslog(LOG_ERR, "Copying started...");
     while (1){
-        in = fread(buffer, 1, COPY_BUFFER, srcFile);
+        in = fread(buffer, 1, cp_buffer, srcFile);
         if( in == 0 ) break;
         out = fwrite(buffer, 1, in, dstFile);
         if( out == 0 ) break;
@@ -103,7 +163,6 @@ int checkAndSync(char* src,char* dst){
     char* srcFilePath;
     char* dstFilePath;
 
-    syslog(LOG_INFO, "jestem chceckAndSync: %s  %s", src, dst);
 
     if(srcDir==NULL){
         syslog(LOG_ERR, "Error opening source directory: %s", src);
@@ -114,27 +173,28 @@ int checkAndSync(char* src,char* dst){
         return 1;
     }
 
-    while (currentFile = readdir(srcDir) != NULL){
+    while ((currentFile = readdir(srcDir)) != NULL){
         if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ //istnieje lepsza wersja używając S_IFLNK
             srcFilePath = pathLinking(src, currentFile->d_name);
             dstFilePath = pathLinking(dst, currentFile->d_name);
 
+            dstFStat.st_mtime = 0; //jeśli plik nie istniał to czas modyfikacji jest równy zero
             stat(srcFilePath,&srcFStat);
-            file_exist = stat(dstFilePath,&dstFStat);
+            file_exist = stat(dstFilePath,&dstFStat);   //jeśli plik istnieje to czas modyfikacji jest nadpisywany
 
             if(fileOrDir(srcFilePath) && srcFStat.st_mtime > dstFStat.st_mtime){  //czas modyfikacji pokazuje że trzeba kopiować, wybierzmy rodzaj
                 if(srcFStat.st_size <= cp_buffer) readWriteCopy(srcFilePath,dstFilePath);
                 else mapCopy(srcFilePath, dstFilePath, &srcFStat);
             }else if(fileOrDir(srcFilePath) == 0 && recursion_option){
                 if(file_exist == -1){
-                    mkdir(dstFilePath,srcFStat.st_mode);
+                    mkdir(dstFilePath,srcFStat.st_mode);     //srcFStat.st_mode
                     syslog(LOG_INFO, "New directory has been created: %s", dstFilePath);
                 }
                 checkAndSync(srcFilePath,dstFilePath);
             }
         }
     }
-    syslog(LOG_INFO, "zakonczylem chceckAndSync: %s  %s", src, dst);
+
     free(currentFile);
     closedir(srcDir);
     closedir(dstDir);
@@ -145,7 +205,6 @@ int checkAndDelete(char* src,char* dst) {
     DIR *srcDir = opendir(src);
     DIR *dstDir = opendir(dst);
 
-    syslog(LOG_INFO, "jestem chceckAndDelete: %s  %s", src, dst);
     struct dirent *currentFile;
     struct stat srcFStat, dstFStat;
     int file_exist;
@@ -158,7 +217,7 @@ int checkAndDelete(char* src,char* dst) {
         return 1;
     }
 
-    while (currentFile = readdir(srcDir) != NULL){
+    while ((currentFile = readdir(dstDir)) != NULL){
         if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ //istnieje lepsza wersja używając S_IFLNK
             srcFilePath = pathLinking(src, currentFile->d_name);
             dstFilePath = pathLinking(dst, currentFile->d_name);
@@ -167,15 +226,15 @@ int checkAndDelete(char* src,char* dst) {
             file_exist = fileOrDir(dstFilePath);
 
             if(file_exist == 1){    //jest zywkłym plikiem
-                if(lstat(srcDir,&srcFStat) == -1){  //w katalogu źródłowym nie istnieje taki plik
+                if(lstat(srcFilePath,&srcFStat) == -1){  //w katalogu źródłowym nie istnieje taki plik
                     unlink(dstFilePath);
-                    syslog(LOG_INFO, "File has been deleted: %s", dstFilePath);
+                    syslog(LOG_INFO, "File has been deleted1: %s", dstFilePath);
                 }else if(file_exist == 0){      //jest katalogiem
                     unlink(dstFilePath);
-                    syslog(LOG_INFO, "File has been deleted: %s", dstFilePath);
+                    syslog(LOG_INFO, "File has been deleted2: %s", dstFilePath);
                 }
             }else if(file_exist == 0 && recursion_option){      //jest katalogiem
-                if(lstat(srcDir,&srcFStat) == -1){       //w źródłowym katalogu nie ma takiego katalogu
+                if(lstat(srcFilePath,&srcFStat) == -1){       //w źródłowym katalogu nie ma takiego katalogu
                     checkAndDelete(srcFilePath,dstFilePath);
                     rmdir(dstFilePath);
                     syslog(LOG_INFO, "Directory has been deleted: %s", dstFilePath);
@@ -186,7 +245,7 @@ int checkAndDelete(char* src,char* dst) {
 
         }
     }
-    syslog(LOG_INFO, "zakonczylem chceckAndDelete: %s  %s", src, dst);
+
     free(currentFile);
     closedir(srcDir);
     closedir(dstDir);
@@ -194,6 +253,10 @@ int checkAndDelete(char* src,char* dst) {
 }
 
 int main(int argc, char* argv[]){
+    // Open a log file
+    openlog("SynchronizeDemon", LOG_PID, LOG_LOCAL0);
+    if(checkParameters(argc,argv) == -1) exit(-1);
+    setParameters(argc,argv);
 
     pid_t process_id = 0;
     pid_t sid = 0;
@@ -223,8 +286,6 @@ int main(int argc, char* argv[]){
     }
 
 
-    // Open a log file
-    openlog("SynchronizeDemon", LOG_PID, LOG_LOCAL0);
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
         syslog(LOG_INFO, "SynchronizeDemon woke up");
@@ -232,7 +293,7 @@ int main(int argc, char* argv[]){
         checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
         checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
-        sleep(15);
+        sleep(sleepTime);
         //spanie
 
     }
