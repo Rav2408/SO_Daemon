@@ -14,7 +14,6 @@
 #include <limits.h> 		// limity systemowe (w celu pobrania PATH_MAX, czyli maksymalna dlugosc sciezki w systemie)
 
 #define MAX_PATH_LENGTH 2048
-#define COPY_BUFFER 1024
 
 int cp_buffer = 2048;
 int recursion_option = 0;
@@ -39,54 +38,56 @@ int fileOrDir(char* path){
     return -1;      //error
 }
 
-int checkParameters(int argc, char* argv[])
-{
-    if (argc < 3 || argc > 8)
-    {
+void signalHandle(int sig){
+    if(sig == SIGALRM) syslog(LOG_INFO, "Demon woken up automatically");
+    else if (sig == SIGUSR1) syslog(LOG_INFO, "Demon woken up by SIGUSR1 signal");
+}
+
+void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){
+    sigemptyset(&newSet);
+
+    newSignal.sa_handler = &signalHandle;
+    newSignal.sa_flags = 0;
+    newSignal.sa_mask = newSet;
+
+    sigaction(sig, &newSignal, NULL);
+}
+
+int checkParameters(int argc, char* argv[]){
+    if (argc < 3 || argc > 8){
         syslog(LOG_ERR, "Wrong number of parameters");
         return -1;
     }
-    else if (fileOrDir(argv[1]) != 0)
-    {
+    else if (fileOrDir(argv[1]) != 0){
         syslog(LOG_ERR, "%s is not valid", argv[1]);
         return -1;
     }
-    else if (fileOrDir(argv[2]) != 0)
-    {
+    else if (fileOrDir(argv[2]) != 0){
         syslog(LOG_ERR, "%s is not valid", argv[2]);
         return -1;
     }
-    else
-    {
+    else{
         return 0;
     }
 }
 
-void setParameters(int argc, char* argv[])
-{
-    for (int i = 3; i < argc; i++)
-    {
-        if (argv[i][0] == "-" && argv[i][1] == "t")
-        {
-            if (i+1 < argc && atoi(argv[i+1]) > 0)
-            {
+void setParameters(int argc, char* argv[]){
+    for (int i = 3; i < argc; i++){
+        if (argv[i][0] == '-' && argv[i][1] == 't'){
+            if (i+1 < argc && atoi(argv[i+1]) > 0){
                 sleepTime = atoi(argv[i+1]);
             }
         }
-        if (argv[i][0] == "-" && argv[i][1] == "R")
-        {
+        if (argv[i][0] == '-' && argv[i][1] == 'R'){
             recursion_option = 1;
         }
-        if (argv[i][0] == "-" && argv[i][1] == "d")
-        {
-            if (i+1 < argc && atoi(argv[i+1]) > 0)
-            {
+        if (argv[i][0] == '-' && argv[i][1] == 'd'){
+            if (i+1 < argc && atoi(argv[i+1]) > 0){
                 cp_buffer = atoi(argv[i + 1]);
             }
         }
     }
 }
-
 
 char* pathLinking(char* path, char* fName){
     char* fullPath = malloc(MAX_PATH_LENGTH*sizeof(char));
@@ -97,7 +98,6 @@ char* pathLinking(char* path, char* fName){
 }
 
 int readWriteCopy(char* src, char* dst){
-
     FILE* srcFile = fopen(src, "rb");
     FILE* dstFile = fopen(dst, "wb");
 
@@ -111,12 +111,12 @@ int readWriteCopy(char* src, char* dst){
         return 1;
     }
 
-    char buffer[COPY_BUFFER];
+    char buffer[cp_buffer];
     size_t in,out;
 
     syslog(LOG_ERR, "Copying started...");
     while (1){
-        in = fread(buffer, 1, COPY_BUFFER, srcFile);
+        in = fread(buffer, 1, cp_buffer, srcFile);
         if( in == 0 ) break;
         out = fwrite(buffer, 1, in, dstFile);
         if( out == 0 ) break;
@@ -186,6 +186,7 @@ int checkAndSync(char* src,char* dst){
             if(fileOrDir(srcFilePath) && srcFStat.st_mtime > dstFStat.st_mtime){  //czas modyfikacji pokazuje że trzeba kopiować, wybierzmy rodzaj
                 if(srcFStat.st_size <= cp_buffer) readWriteCopy(srcFilePath,dstFilePath);
                 else mapCopy(srcFilePath, dstFilePath, &srcFStat);
+				chmod(dstFilePath, srcFStat.st_mode); 
             }else if(fileOrDir(srcFilePath) == 0 && recursion_option){
                 if(file_exist == -1){
                     mkdir(dstFilePath,srcFStat.st_mode);     //srcFStat.st_mode
@@ -195,7 +196,7 @@ int checkAndSync(char* src,char* dst){
             }
         }
     }
-    syslog(LOG_INFO, "zakonczylem chceckAndSync: %s  %s", src, dst);
+
     free(currentFile);
     closedir(srcDir);
     closedir(dstDir);
@@ -218,7 +219,7 @@ int checkAndDelete(char* src,char* dst) {
         return 1;
     }
 
-    while ((currentFile = readdir(srcDir)) != NULL){
+    while ((currentFile = readdir(dstDir)) != NULL){
         if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ //istnieje lepsza wersja używając S_IFLNK
             srcFilePath = pathLinking(src, currentFile->d_name);
             dstFilePath = pathLinking(dst, currentFile->d_name);
@@ -227,15 +228,15 @@ int checkAndDelete(char* src,char* dst) {
             file_exist = fileOrDir(dstFilePath);
 
             if(file_exist == 1){    //jest zywkłym plikiem
-                if(lstat(srcDir,&srcFStat) == -1){  //w katalogu źródłowym nie istnieje taki plik
+                if(lstat(srcFilePath,&srcFStat) == -1){  //w katalogu źródłowym nie istnieje taki plik
                     unlink(dstFilePath);
-                    syslog(LOG_INFO, "File has been deleted: %s", dstFilePath);
+                    syslog(LOG_INFO, "File has been deleted1: %s", dstFilePath);
                 }else if(file_exist == 0){      //jest katalogiem
                     unlink(dstFilePath);
-                    syslog(LOG_INFO, "File has been deleted: %s", dstFilePath);
+                    syslog(LOG_INFO, "File has been deleted2: %s", dstFilePath);
                 }
             }else if(file_exist == 0 && recursion_option){      //jest katalogiem
-                if(lstat(srcDir,&srcFStat) == -1){       //w źródłowym katalogu nie ma takiego katalogu
+                if(lstat(srcFilePath,&srcFStat) == -1){       //w źródłowym katalogu nie ma takiego katalogu
                     checkAndDelete(srcFilePath,dstFilePath);
                     rmdir(dstFilePath);
                     syslog(LOG_INFO, "Directory has been deleted: %s", dstFilePath);
@@ -254,6 +255,8 @@ int checkAndDelete(char* src,char* dst) {
 }
 
 int main(int argc, char* argv[]){
+    struct sigaction autoSig, userSig;
+    sigset_t autoSet, userSet;
     // Open a log file
     openlog("SynchronizeDemon", LOG_PID, LOG_LOCAL0);
     if(checkParameters(argc,argv) == -1) exit(-1);
@@ -289,13 +292,14 @@ int main(int argc, char* argv[]){
 
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
-        syslog(LOG_INFO, "SynchronizeDemon woke up");
-        //sprawdzanie sygnałów
-        checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
-        //checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
+
+        setSignal(autoSig, autoSet, SIGALRM);
+        setSignal(userSig, userSet, SIGUSR1);
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
-        sleep(sleepTime);
-        //spanie
+        alarm(sleepTime);
+        pause();    //bez pauzy powtarza komunikaty w syslogu
+        checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
+        checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
 
     }
 
