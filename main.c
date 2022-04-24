@@ -14,6 +14,7 @@
 #include <limits.h> 		// limity systemowe (w celu pobrania PATH_MAX, czyli maksymalna dlugosc sciezki w systemie)
 
 #define MAX_PATH_LENGTH 2048
+#define COPY_BUFFER 1024
 
 int cp_buffer = 2048;
 int recursion_option = 0;
@@ -34,11 +35,60 @@ char* pathLinking(char* path, char* fName){
     return fullPath;
 }
 
-int readWriteCopy(){
+int readWriteCopy(char* src, char* dst){
+
+    FILE* srcFile = fopen(src, "rb");
+    FILE* dstFile = fopen(dst, "wb");
+
+    if(srcFile==NULL){
+        syslog(LOG_ERR, "Error opening source file: %s", src);
+        return 1;
+    }
+
+    if(dstFile==NULL){
+        syslog(LOG_ERR, "Error opening file for writing: %s", dst);
+        return 1;
+    }
+
+    char buffer[COPY_BUFFER];
+    size_t in,out;
+
+    syslog(LOG_ERR, "Copying started...");
+    while (1){
+        in = fread(buffer, 1, COPY_BUFFER, srcFile);
+        if( in == 0 ) break;
+        out = fwrite(buffer, 1, in, dstFile);
+        if( out == 0 ) break;
+    }
+    syslog(LOG_ERR, "Copying is complete: %s", dst);
+    fclose(srcFile);
+    fclose(dstFile);
+
     return 0;
 }
 
-int mapCopy(){
+int mapCopy(char* src, char* dst, struct stat* srcStat){
+    int srcFile = open(src, O_RDONLY);
+    int dstFile = open(dst, O_WRONLY | O_CREAT | O_TRUNC, 0777);
+
+    if(srcFile < 0){
+        syslog(LOG_ERR, "Error opening source file: %s", src);
+        return 1;
+    }
+
+    if(dstFile < 0){
+        syslog(LOG_ERR, "Error opening file for writing: %s", dst);
+        return 1;
+    }
+
+    char* buffer = mmap(0, srcStat->st_size, PROT_READ, MAP_SHARED, srcFile, 0);    //sprawdzić czy nie ma problemu z bufferem
+    syslog(LOG_ERR, "Copying started...");
+    if(write(dstFile, buffer, srcStat->st_size) < 0)
+    {
+        syslog(LOG_ERR, "Error on writing the file");
+        return 1;
+    }
+    syslog(LOG_ERR, "Copying is complete: %s", dst);
     return 0;
 }
 
@@ -72,8 +122,8 @@ int checkAndSync(char* src,char* dst){
             file_exist = stat(dstFilePath,&dstFStat);
 
             if(fileOrDir(srcFilePath) && srcFStat.st_mtime > dstFStat.st_mtime){  //czas modyfikacji pokazuje że trzeba kopiować, wybierzmy rodzaj
-                if(srcFStat.st_size <= cp_buffer) readWriteCopy();
-                else mapCopy();
+                if(srcFStat.st_size <= cp_buffer) readWriteCopy(srcFilePath,dstFilePath);
+                else mapCopy(srcFilePath, dstFilePath, &srcFStat);
             }else if(fileOrDir(srcFilePath) == 0 && recursion_option){
                 if(file_exist == -1){
                     mkdir(dstFilePath,srcFStat.st_mode);
@@ -167,19 +217,18 @@ int main(int argc, char* argv[]){
     if(sid < 0){
         exit(1);    // Return failure
     }
-    
+
 
     // Open a log file
     openlog("SynchronizeDemon", LOG_PID, LOG_LOCAL0);
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
         syslog(LOG_INFO, "SynchronizeDemon woke up");
-        printf("Concatenated String: %s\n", pathLinking("Hello","World!"));
         //sprawdzanie sygnałów
-        //sprawdzanie katalogu źródłowego w celu kopiowania
-        //sprawdzanie katalogu docelowego w celu usuwania
+        checkAndSync(argv[2], argv[3]); //sprawdzanie katalogu źródłowego w celu kopiowania
+        checkAndDelete(argv[2], argv[3]); //sprawdzanie katalogu docelowego w celu usuwania
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
-        sleep(10);
+        sleep(15);
         //spanie
 
     }
