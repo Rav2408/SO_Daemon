@@ -18,6 +18,65 @@
 
 int cp_buffer = 2048;
 int recursion_option = 0;
+int sleepTime = 300;
+
+int checkIfPathIsDirectory(char* path)
+{
+    struct stat statistics;
+
+    stat(path, statistics);
+    
+    if (S_ISDIR(statistics.st_mode) != 0) return 1;
+    else return -1;
+
+}
+
+int checkParameters(int argc, char* argv[])
+{
+    if (argc < 3 || argc > 8)
+    {
+        syslog(LOG_ERR, "Wrong number of parameters");
+        return -1;
+    }
+    else if (checkIfPathIsDirectory(argv[1]) == -1)
+    {
+        syslog(LOG_ERR, "%s is not valid", argv[1]);
+        return -1;
+    }
+    else if (checkIfPathIsDirectory(argv[2]) == -1)
+    {
+        syslog(LOG_ERR, "%s is not valid", argv[2]);
+        return -1;
+    }
+    else
+    {
+        return 0;
+    }
+}
+void setParameters(int argc, char* argv[])
+{
+    for (int i = 3; i < argc, i++)
+    {
+        if (argv[i][0] == "-" && argv[i][1] == "t")
+        {
+            if (i++ < argc && atoi(argv[i++]) > 0)
+            {
+                sleeptime = atoi(argv[i++]);
+            }
+        }
+        if (argv[i][0] == "-" && argv[i][1] == "R")
+        {
+            recursion_option = 1;
+        }
+        if (argv[i][0] == "-" && argv[i][1] == "d")
+        {
+            if (i++ < argc && atoi(argv[i++]) > 0)
+            {
+                cp_buffer = atoi(argv[i + 1]);
+            }
+        }
+    }
+}
 
 int fileOrDir(char* path){
     struct stat fileStatistic;
