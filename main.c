@@ -39,16 +39,18 @@ int fileOrDir(char* path){
 }
 
 void signalHandle(int sig){
-	if(sig == SIGALRM) syslog(LOG_INFO, "Demon woken up automatically");
+    if(sig == SIGALRM) syslog(LOG_INFO, "Demon woken up automatically");
     else if (sig == SIGUSR1) syslog(LOG_INFO, "Demon woken up by SIGUSR1 signal");
 }
 
 void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){
-	sigemptyset(&newSet);
-	newSignal.sa_handler = &signalHandle;
-	newSignal.sa_flags = 0;
-	newSignal.sa_mask = newSet;
-	sigaction(sig, &newSignal, NULL);
+    sigemptyset(&newSet);
+
+    newSignal.sa_handler = &signalHandle;
+    newSignal.sa_flags = 0;
+    newSignal.sa_mask = newSet;
+
+    sigaction(sig, &newSignal, NULL);
 }
 
 int checkParameters(int argc, char* argv[]){
@@ -167,7 +169,7 @@ int checkAndSync(char* src,char* dst){
         syslog(LOG_ERR, "Error opening source directory: %s", src);
         return 1;
     }
-    if(dstDir==NfULL){
+    if(dstDir==NULL){
         syslog(LOG_ERR, "Error opening destination directory: %s", dst);
         return 1;
     }
@@ -289,14 +291,14 @@ int main(int argc, char* argv[]){
 
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
-        //syslog(LOG_INFO, "SynchronizeDemon woke up");
+
         setSignal(autoSig, autoSet, SIGALRM);
-		setSignal(userSig, userSet, SIGUSR1);
-        checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
-        checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
+        setSignal(userSig, userSet, SIGUSR1);
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
         alarm(sleepTime);
-        //spanie
+        pause();    //bez pauzy powtarza komunikaty w syslogu
+        checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
+        checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
 
     }
 
