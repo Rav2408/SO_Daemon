@@ -301,11 +301,11 @@ int main(int argc, char* argv[]){
     syslog(LOG_INFO, "SynchronizeDemon has started");   //(int priority, const char* messege)
     while (1){
 
-        setSignal(autoSig, autoSet, SIGALRM);
+        setSignal(autoSig, autoSet, SIGALRM); // Ustawienie sygnałów i ich obsługi
         setSignal(userSig, userSet, SIGUSR1);
         syslog(LOG_INFO, "SynchronizeDemon fell asleep");
         alarm(sleepTime);
-        pause();
+        pause(); // Zatrzymuje proces do czasu wywołania przez sygnał
         checkAndSync(argv[1], argv[2]); //sprawdzanie katalogu źródłowego w celu kopiowania
         checkAndDelete(argv[1], argv[2]); //sprawdzanie katalogu docelowego w celu usuwania
 
