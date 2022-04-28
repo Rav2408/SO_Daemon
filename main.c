@@ -1,17 +1,16 @@
-#include <stdio.h> 			// Standard Input/Output, czyli standardowe wejście-wyjście.
-#include <string.h>			// Operacje na łańcuchach znaków.
-#include <stdlib.h>			// Najbardziej podstawowe funkcje - exit(), malloc().
-#include <syslog.h>			// Definicje dla rejestrowanie błędów systemu.
-#include <dirent.h>			// Udostępnia funkcje, makra, i struktury, które umożliwiają łatwe trawersowanie katalogów.
+#include <stdio.h> 			
+#include <string.h>			
+#include <stdlib.h>			
+#include <syslog.h>			// Możliwość użycia logu systemowego.
+#include <dirent.h>			// Udostępnia funkcje i struktury umożliwiające listowanie plików.
 #include <signal.h>			// Obsługa sygnałów.
-#include <unistd.h>			// Znajduje się na prawie każdym systemie zgodnym ze standardem POSIX (Mac OS X, Linux, itd.) i udostępnia różne makra i funkcje niezbędne
-// do tworzenia programów, które muszą korzystać z pewnych usług systemu operacyjnego.
+#include <unistd.h>			// Standardowa biblioteka dla systemów Linux udostepniająca makra i funkcje 
 #include <sys/types.h>		// Różne typy danych.
-#include <fcntl.h>			// Działanie na plikach i inne operacje.
-#include <sys/mman.h>		// Deklaracje zarządzania pamięcią.
-#include <sys/stat.h>		// Nagłówek określa strukturę danych zwracanych przez funkcje fstat (), lstat (), stat ().
-#include <utime.h> 			// modyfikacja czasu
-#include <limits.h> 		// limity systemowe (w celu pobrania PATH_MAX, czyli maksymalna dlugosc sciezki w systemie)
+#include <fcntl.h>			// Działanie na plikach - otwieranie, zamykanie, ustawianie uprawnień.
+#include <sys/mman.h>		// Deklaracje zarządzania pamięcią, używane do mapowania.
+#include <sys/stat.h>		// Definiuje strukury danych zwracane przez funkcje stat(), fstat(), lstat().
+#include <utime.h> 			// Modyfikacja czasu		//sprawdzic czy potrzebne
+#include <limits.h> 		// Limity systemowe (w celu pobrania PATH_MAX, czyli maksymalna dlugosc sciezki w systemie)    //sprawdzic czy potrzebne
 
 #define MAX_PATH_LENGTH 2048
 
@@ -30,30 +29,30 @@ int sleepTime = 15;
 //}
 
 
-int fileOrDir(char* path){
+int fileOrDir(char* path){ 							//funkcja sprawdzająca czy ścieżka jest katalogiem, czy plikiem
     struct stat fileStatistic;
-    stat(path,&fileStatistic);
-    if(S_ISREG(fileStatistic.st_mode)) return 1;    //regular file
+    stat(path,&fileStatistic);x`
+    if(S_ISREG(fileStatistic.st_mode)) return 1;	//regular file
     if(S_ISDIR(fileStatistic.st_mode)) return 0;    //directory
     return -1;      //error
 }
 
-void signalHandle(int sig){
-    if(sig == SIGALRM) syslog(LOG_INFO, "Demon woken up automatically");
-    else if (sig == SIGUSR1) syslog(LOG_INFO, "Demon woken up by SIGUSR1 signal");
+void signalHandle(int sig){ 												// Obsługa sygnału - funkcja wypisująca do logu zależnie od typu sygnału
+    if(sig == SIGALRM) syslog(LOG_INFO, "Daemon woken up automatically");
+    else if (sig == SIGUSR1) syslog(LOG_INFO, "Daemon woken up by SIGUSR1 signal");
 }
 
-void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){
+void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){  //
     sigemptyset(&newSet);
 
     newSignal.sa_handler = &signalHandle;
-    newSignal.sa_flags = 0;
+    newSignal.sa_flags = 0;						
     newSignal.sa_mask = newSet;
 
     sigaction(sig, &newSignal, NULL);
 }
 
-int checkParameters(int argc, char* argv[]){
+int checkParameters(int argc, char* argv[]){ 		// Funkcja sprawdzająca poprawność argumentów podanych do programu
     if (argc < 3 || argc > 8){
         syslog(LOG_ERR, "Wrong number of parameters");
         return -1;
@@ -62,7 +61,7 @@ int checkParameters(int argc, char* argv[]){
         syslog(LOG_ERR, "%s is not valid", argv[1]);
         return -1;
     }
-    else if (fileOrDir(argv[2]) != 0){
+    else if (fileOrDir(argv[2]) != 0){ 				// Sprawdzamy czy podana ścieżka docelowa jest katalogiem.
         syslog(LOG_ERR, "%s is not valid", argv[2]);
         return -1;
     }
@@ -71,17 +70,17 @@ int checkParameters(int argc, char* argv[]){
     }
 }
 
-void setParameters(int argc, char* argv[]){
+void setParameters(int argc, char* argv[]){			  // Funkcja sprawdzające parametry podane przez użytkownika do tablicy argv
     for (int i = 3; i < argc; i++){
-        if (argv[i][0] == '-' && argv[i][1] == 't'){
+        if (argv[i][0] == '-' && argv[i][1] == 't'){  //poszukiwanie flagi -t zmieniającej czas czuwania demona
             if (i+1 < argc && atoi(argv[i+1]) > 0){
                 sleepTime = atoi(argv[i+1]);
             }
         }
-        if (argv[i][0] == '-' && argv[i][1] == 'R'){
+        if (argv[i][0] == '-' && argv[i][1] == 'R'){  //poszukiwanie flagi -R włączającej rekurencyjne synchronizowanie
             recursion_option = 1;
         }
-        if (argv[i][0] == '-' && argv[i][1] == 'd'){
+        if (argv[i][0] == '-' && argv[i][1] == 'd'){  //poszukiwanie flagi -d ustawiającej próg odróżnienia dużych plików
             if (i+1 < argc && atoi(argv[i+1]) > 0){
                 cp_buffer = atoi(argv[i + 1]);
             }
@@ -89,7 +88,7 @@ void setParameters(int argc, char* argv[]){
     }
 }
 
-char* pathLinking(char* path, char* fName){
+char* pathLinking(char* path, char* fName){					//Funkcja, która tworzy ścieżki do rekurencyjnej synchronizacji
     char* fullPath = malloc(MAX_PATH_LENGTH*sizeof(char));
     strcpy(fullPath,path);
     strcat(fullPath,"/");
@@ -97,7 +96,7 @@ char* pathLinking(char* path, char* fName){
     return (char*)fullPath;
 }
 
-int readWriteCopy(char* src, char* dst){
+int readWriteCopy(char* src, char* dst){ 				
     FILE* srcFile = fopen(src, "rb");
     FILE* dstFile = fopen(dst, "wb");
 
@@ -153,11 +152,11 @@ int mapCopy(char* src, char* dst, struct stat* srcStat){
     return 0;
 }
 
-int checkAndSync(char* src,char* dst){
+int checkAndSync(char* src,char* dst){		// Funkcja synchronizująca katalogi
     DIR* srcDir = opendir(src);
     DIR* dstDir = opendir(dst);
 
-    struct dirent *currentFile;
+    struct dirent *currentFile;				// Biblioteka dirent.h udostępnia strukturę dirent, która określa aktualny element katalogu
     struct stat srcFStat, dstFStat;
     int file_exist;
 
@@ -174,8 +173,8 @@ int checkAndSync(char* src,char* dst){
         return 1;
     }
 
-    while ((currentFile = readdir(srcDir)) != NULL){
-        if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ //istnieje lepsza wersja używając S_IFLNK
+    while ((currentFile = readdir(srcDir)) != NULL){		// Readdir zwraca wskaźniki na kolejne podkatalogi w danym strumieniu, jeśli nie ma więcej podkalogów, zwraca wartość NULL
+        if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ 		// Kropka reprezentuje nazwę obecnego katalogu, dwie kropki katalogu wyżej
             srcFilePath = pathLinking(src, currentFile->d_name);
             dstFilePath = pathLinking(dst, currentFile->d_name);
 
@@ -183,12 +182,13 @@ int checkAndSync(char* src,char* dst){
             stat(srcFilePath,&srcFStat);
             file_exist = stat(dstFilePath,&dstFStat);   //jeśli plik istnieje to czas modyfikacji jest nadpisywany
 
-            if(fileOrDir(srcFilePath) && srcFStat.st_mtime > dstFStat.st_mtime){  //czas modyfikacji pokazuje że trzeba kopiować, wybierzmy rodzaj
+            if(fileOrDir(srcFilePath) && srcFStat.st_mtime > dstFStat.st_mtime){  // Jeśli czas modyfikacji pliku źródłowego jest nowszy, należy kopiować
                 if(srcFStat.st_size <= cp_buffer) readWriteCopy(srcFilePath,dstFilePath);
                 else mapCopy(srcFilePath, dstFilePath, &srcFStat);
-            }else if(fileOrDir(srcFilePath) == 0 && recursion_option){
+				chmod(dstFilePath, srcFStat.st_mode); 
+            }else if(fileOrDir(srcFilePath) == 0 && recursion_option){ //  Jeżeli ścieżka jest katalogiem i użytkownik wybrał opcję rekurencyjnego kopiowania plików
                 if(file_exist == -1){
-                    mkdir(dstFilePath,srcFStat.st_mode);     //srcFStat.st_mode
+                    mkdir(dstFilePath,srcFStat.st_mode);
                     syslog(LOG_INFO, "New directory has been created: %s", dstFilePath);
                 }
                 checkAndSync(srcFilePath,dstFilePath);
@@ -202,7 +202,7 @@ int checkAndSync(char* src,char* dst){
     return 0;
 }
 
-int checkAndDelete(char* src,char* dst) {
+int checkAndDelete(char* src,char* dst) { 		// Funkcja usuwająca pliki które nie znajdują się w ścieżce źródłowej
     DIR *srcDir = opendir(src);
     DIR *dstDir = opendir(dst);
 
@@ -219,7 +219,7 @@ int checkAndDelete(char* src,char* dst) {
     }
 
     while ((currentFile = readdir(dstDir)) != NULL){
-        if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ //istnieje lepsza wersja używając S_IFLNK
+        if((strcmp(currentFile->d_name, ".") != 0) && (strcmp(currentFile->d_name, "..") != 0) ){ 
             srcFilePath = pathLinking(src, currentFile->d_name);
             dstFilePath = pathLinking(dst, currentFile->d_name);
 
