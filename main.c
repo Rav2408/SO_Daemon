@@ -34,7 +34,7 @@ void signalHandle(int sig){
     else if (sig == SIGUSR1) syslog(LOG_INFO, "Daemon woken up by SIGUSR1 signal");
 }
 
-void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){  //
+void setSignal(struct sigaction newSignal, sigset_t newSet, int sig){  // Służy do ustawienia parametrów sygnału
     sigemptyset(&newSet);
 
     newSignal.sa_handler = &signalHandle;
